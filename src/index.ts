@@ -132,13 +132,21 @@ async function checkInvalidateCandidates() {
 
   for (let cacheEl of cacheList) {
     let respCache = await cache.match(cacheEl.url);
-    if (getUnixTime() < cacheEl.invalidateTime && respCache) {
+
+    console.log('url', cacheEl.url);
+    console.log('invalidateTime left', cacheEl.invalidateTime - getUnixTime());
+    console.log('expireTime left', cacheEl.expireTime - getUnixTime());
+    console.log('invalidateCount', cacheEl.invalidateCount);
+    console.log('   ');
+
+    const requestConfig = config.list.find((conf) =>
+      cacheEl.url.match(conf.url),
+    );
+    if (requestConfig && respCache && getUnixTime() < cacheEl.invalidateTime) {
       continue;
     }
+
     fetch(cacheEl.url, JSON.parse(cacheEl.options)).then((response) => {
-      const requestConfig = config.list.find((conf) =>
-        cacheEl.url.match(conf.url),
-      );
       updateRequestCache({
         url: cacheEl.url,
         options: cacheEl.options,

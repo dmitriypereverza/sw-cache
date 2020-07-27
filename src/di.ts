@@ -1,9 +1,16 @@
 import { buildContainer } from "ts-di-injector";
 
 import { IndexDBStorage } from "./storage/IndexDBStorage";
-import { RequestSerializer } from "./services/requestSerializer";
+import {
+  RequestSerializer,
+  RequestSerializerInterface
+} from "./services/requestSerializer";
+import { DataStorageInterface } from "./storage";
 
-export default buildContainer({
+export default buildContainer<{
+  dataStorageService: DataStorageInterface;
+  requestSerializerService: RequestSerializerInterface;
+}>({
   classes: {
     dataStorageService: {
       class: IndexDBStorage,

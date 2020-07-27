@@ -1,6 +1,10 @@
 import { pick } from "ramda";
 
-export class RequestSerializer {
+export interface RequestSerializerInterface {
+  serialize(req: Request): Promise<string>;
+}
+
+export class RequestSerializer implements RequestSerializerInterface {
   async serialize(req: Request): Promise<string> {
     const request = req.clone();
 

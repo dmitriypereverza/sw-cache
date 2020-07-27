@@ -1,15 +1,13 @@
 {
   "compilerOptions": {
-    "target": "ESNEXT",
-    "module": "ESNext",
+    "target": "es5",
+    "module": "es6",
     "lib": [
-      "es2015",
       "es2016",
       "webworker"
     ],
     "allowJs": true,
     "checkJs": false,
-    "jsx": "preserve",
     "sourceMap": true,
     "removeComments": false,
     "noEmit": false,
@@ -28,10 +26,6 @@
     "baseUrl": "./src",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "typeRoots": [
-      "./node_modules/@types",
-      "./global.d.ts"
-    ],
     "importHelpers": true,
     "reactNamespace": "",
     "experimentalDecorators": true,
@@ -43,7 +37,6 @@
     "isolatedModules": false
   },
   "include": [
-    "src",
-    "global.d.ts"
+    "src"
   ]
 }

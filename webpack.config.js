@@ -5,8 +5,8 @@ module.exports = {
   module: {
     rules: [
       {
-        use: "ts-loader",
-        exclude: /node_modules/,
+        test: /\.ts?$/,
+        use: "ts-loader"
       },
     ],
   },

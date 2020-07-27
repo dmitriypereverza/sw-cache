@@ -4,7 +4,7 @@ export function getUnixTime() {
   return Math.round(new Date().getTime() / 1000);
 }
 
-interface RequestCacheRow {
+export interface RequestCacheRow {
   url: string;
   options: string;
   timestamp: number;
