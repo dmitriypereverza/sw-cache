@@ -22,18 +22,21 @@ export interface HooksType {
   onMessage: AsyncParallelHook;
   onFetch: AsyncParallelHook;
   onCachingRequest: AsyncSeriesHook;
-  onPostRequestProcessing: AsyncSeriesHook;
+  onPostRequestProcessing: AsyncSeriesHook<{
+    request: Request;
+    requestConfig: RequestCacheConfig;
+  }>;
   onBackgroundTask: AsyncParallelHook;
   isNeedToSendCachedResponse: AsyncSeriesWaterfallHook<{
     request: Request;
     cacheInfo: RequestCacheRow;
     requestConfig: RequestCacheConfig;
-    result: boolean;
+    resultWeight: number;
   }>;
   isNeedToInvalidateCached: AsyncSeriesWaterfallHook<{
     cacheInfo: RequestCacheRow;
     requestConfig: RequestCacheConfig;
-    result: boolean;
+    resultWeight: number;
   }>;
   onAfterFetch: AsyncParallelHook;
   onInsertCacheParams: AsyncSeriesWaterfallHook<{
@@ -64,10 +67,7 @@ export class SWProcessingPipe {
       onMessage: new AsyncParallelHook(["type", "payload"]),
       onFetch: new AsyncParallelHook(["request"]),
       onCachingRequest: new AsyncSeriesHook(["request", "requestConfig"]),
-      onPostRequestProcessing: new AsyncSeriesHook([
-        "request",
-        "requestConfig",
-      ]),
+      onPostRequestProcessing: new AsyncSeriesHook(["args"]),
       onBackgroundTask: new AsyncParallelHook(),
       isNeedToSendCachedResponse: new AsyncSeriesWaterfallHook(["args"]),
       isNeedToInvalidateCached: new AsyncSeriesWaterfallHook(["args"]),
@@ -111,19 +111,19 @@ export class SWProcessingPipe {
     this.hooks.onFetch.isUsed() && this.hooks.onFetch.promise(event.request);
 
     if (!this.config) return;
-    const reqConfig = this.config.list.find((conf) =>
+    const requestConfig = this.config.list.find((conf) =>
       event.request.url.match(conf.url),
     );
 
-    if (reqConfig) {
-      event.respondWith(this.runRequestPipe(event.request, reqConfig));
+    if (requestConfig) {
+      event.respondWith(this.runRequestPipe(event.request, requestConfig));
 
       if (this.hooks.onPostRequestProcessing.isUsed()) {
         event.waitUntil(
-          this.hooks.onPostRequestProcessing.callAsync(
-            event.request,
-            reqConfig,
-          ),
+          this.hooks.onPostRequestProcessing.callAsync({
+            request: event.request,
+            requestConfig,
+          }),
         );
       }
     }
@@ -141,13 +141,15 @@ export class SWProcessingPipe {
       if (!this.hooks.isNeedToSendCachedResponse.isUsed()) {
         return cachedEl;
       }
-      const { result } = await this.hooks.isNeedToSendCachedResponse.promise({
+      const {
+        resultWeight,
+      } = await this.hooks.isNeedToSendCachedResponse.promise({
         request,
         cacheInfo,
         requestConfig,
-        result: true,
+        resultWeight: 0,
       });
-      if (result) {
+      if (resultWeight > 0) {
         return cachedEl;
       }
     }
@@ -181,12 +183,14 @@ export class SWProcessingPipe {
       );
       if (requestConfig && respCache) {
         if (!this.hooks.isNeedToInvalidateCached.isUsed()) continue;
-        const { result } = await this.hooks.isNeedToInvalidateCached.promise({
+        const {
+          resultWeight,
+        } = await this.hooks.isNeedToInvalidateCached.promise({
           cacheInfo,
           requestConfig,
-          result: true,
+          resultWeight: 0,
         });
-        if (!result) continue;
+        if (resultWeight <= 0) continue;
       }
 
       fetch(cacheInfo.url, JSON.parse(cacheInfo.options)).then((response) => {

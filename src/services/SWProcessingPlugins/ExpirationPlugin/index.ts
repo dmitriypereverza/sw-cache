@@ -3,15 +3,21 @@ import { getUnixTime } from "storage/IndexDBStorage";
 import { HooksType, SWPipePluginInterface } from "../../SWProcessingPipe";
 
 export class ExpirationPlugin implements SWPipePluginInterface {
+  constructor(private expirationWeight: number) {}
+
   init(hooks: HooksType): void {
     hooks.isNeedToSendCachedResponse.tapPromise("ExpirationPlugin", (args) => {
-      const { cacheInfo, result } = args;
+      const { cacheInfo, resultWeight } = args;
       if (!cacheInfo) {
         return Promise.resolve(args);
       }
       return Promise.resolve({
         ...args,
-        result: result && getUnixTime() < cacheInfo.expireTime,
+        resultWeight:
+          resultWeight +
+          (getUnixTime() < cacheInfo.expireTime
+            ? this.expirationWeight
+            : -this.expirationWeight),
       });
     });
 

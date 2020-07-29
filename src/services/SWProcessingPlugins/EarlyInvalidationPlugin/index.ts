@@ -3,20 +3,27 @@ import { getUnixTime } from "storage/IndexDBStorage";
 import { HooksType, SWPipePluginInterface } from "../../SWProcessingPipe";
 
 export class EarlyInvalidationPlugin implements SWPipePluginInterface {
+  constructor(private invalidationWeight: number) {}
+
   init(hooks: HooksType): void {
     hooks.isNeedToInvalidateCached.tapPromise(
       "EarlyInvalidationPlugin",
       (args) => {
-        const { cacheInfo, result } = args;
+        const { cacheInfo, resultWeight } = args;
         if (!cacheInfo || !cacheInfo.invalidateTime) {
           return Promise.resolve(args);
         }
         return Promise.resolve({
           ...args,
-          result: result && getUnixTime() > cacheInfo.invalidateTime,
+          result:
+            resultWeight +
+            (getUnixTime() > cacheInfo.invalidateTime
+              ? this.invalidationWeight
+              : -this.invalidationWeight),
         });
       },
     );
+
     hooks.onInsertCacheParams.tapPromise("EarlyInvalidationPlugin", (args) => {
       const { params, requestConfig } = args;
       return Promise.resolve({

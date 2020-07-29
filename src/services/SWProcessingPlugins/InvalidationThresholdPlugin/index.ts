@@ -1,6 +1,8 @@
 import { HooksType, SWPipePluginInterface } from "../../SWProcessingPipe";
 
 export class InvalidationThresholdPlugin implements SWPipePluginInterface {
+  constructor(private invalidationWeight: number) {}
+
   init(hooks: HooksType): void {
     hooks.onInsertCacheParams.tapPromise(
       "InvalidationThresholdPlugin",
@@ -22,17 +24,19 @@ export class InvalidationThresholdPlugin implements SWPipePluginInterface {
     hooks.isNeedToInvalidateCached.tapPromise(
       "InvalidationThresholdPlugin",
       (args) => {
-        const { cacheInfo, requestConfig, result } = args;
+        const { cacheInfo, requestConfig, resultWeight } = args;
         if (!cacheInfo || cacheInfo.invalidateCount === undefined) {
           return Promise.resolve(args);
         }
-        console.log(cacheInfo.invalidateCount <= requestConfig.invalidateCount);
-        console.log(cacheInfo.invalidateCount - requestConfig.invalidateCount);
+
+        const pluginWeight =
+          cacheInfo.invalidateCount <= requestConfig.invalidateCount
+            ? this.invalidationWeight
+            : -this.invalidationWeight;
+
         return Promise.resolve({
           ...args,
-          result:
-            result &&
-            cacheInfo.invalidateCount <= requestConfig.invalidateCount,
+          resultWeight: resultWeight + pluginWeight,
         });
       },
     );
