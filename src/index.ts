@@ -1,12 +1,14 @@
 import diContainer from "./di";
-import { ExpirationPlugin } from './services/SWProcessingPlugins/ExpirationPlugin';
+import { ExpirationPlugin } from "./services/SWProcessingPlugins/ExpirationPlugin";
 import { EarlyInvalidationPlugin } from "./services/SWProcessingPlugins/EarlyInvalidationPlugin";
+import { InvalidationThresholdPlugin } from "./services/SWProcessingPlugins/InvalidationThresholdPlugin";
 
 const SWProcessingPipe = diContainer.get("SWProcessingPipe");
 
 SWProcessingPipe.setPlugins([
   new ExpirationPlugin(),
   new EarlyInvalidationPlugin(),
+  new InvalidationThresholdPlugin(),
 ]);
 
 self.addEventListener("install", () => SWProcessingPipe.onInstall());
@@ -17,7 +19,7 @@ self.addEventListener("message", (event: any) => {
   SWProcessingPipe.onMessage(event.data.type, event.data.payload);
 });
 
-self.addEventListener("fetch", ev => SWProcessingPipe.onFetchEvent(ev));
+self.addEventListener("fetch", (ev) => SWProcessingPipe.onFetchEvent(ev));
 
 // interface RequestCacheConfig {
 //   url: string;

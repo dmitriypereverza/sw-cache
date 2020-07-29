@@ -1,5 +1,4 @@
 import {
-  AsyncParallelBailHook,
   AsyncParallelHook,
   AsyncSeriesHook,
   AsyncSeriesWaterfallHook,
@@ -28,7 +27,7 @@ export interface HooksType {
   onPostRequestProcessing: AsyncSeriesHook;
   onBackgroundTask: AsyncParallelHook;
   isNeedToSendCachedResponse: AsyncSeriesWaterfallHook;
-  isNeedToInvalidateCached: AsyncParallelBailHook;
+  isNeedToInvalidateCached: AsyncSeriesWaterfallHook;
   onAfterFetch: AsyncParallelHook;
   onInsertCacheParams: AsyncSeriesWaterfallHook;
 }
@@ -59,18 +58,9 @@ export class SWProcessingPipe {
       ]),
       onBackgroundTask: new AsyncParallelHook(),
       isNeedToSendCachedResponse: new AsyncSeriesWaterfallHook(["args"]),
-      isNeedToInvalidateCached: new AsyncParallelBailHook(["cachedRequest"]),
-      onAfterFetch: new AsyncParallelHook([
-        "request",
-        "requestConfig",
-        "response",
-      ]),
-      onInsertCacheParams: new AsyncSeriesWaterfallHook([
-        "existCachedRequest",
-        "params",
-        "requestConfig",
-        "isInvalidation",
-      ]),
+      isNeedToInvalidateCached: new AsyncSeriesWaterfallHook(["args"]),
+      onAfterFetch: new AsyncParallelHook(["args"]),
+      onInsertCacheParams: new AsyncSeriesWaterfallHook(["args"]),
     };
 
     this.trottledFunc = throttle(() => this.checkInvalidateCandidates(), 2000, {
@@ -106,7 +96,7 @@ export class SWProcessingPipe {
   }
 
   public onFetchEvent(event: any) {
-    this.hooks.onFetch.isUsed() && this.hooks.onFetch.callAsync(event.request);
+    this.hooks.onFetch.isUsed() && this.hooks.onFetch.promise(event.request);
 
     if (!this.config) return;
     const reqConfig = this.config.list.find((conf) =>
@@ -171,25 +161,26 @@ export class SWProcessingPipe {
     const cache = await caches.open(this.cacheId);
     const cacheList = await this.dataStorageService.getAllRequestCacheInfo();
 
-    for (let cacheEl of cacheList) {
-      let respCache = await cache.match(cacheEl.url);
+    for (let cacheInfo of cacheList) {
+      let respCache = await cache.match(cacheInfo.url);
 
       const requestConfig = this.config.list.find((conf) =>
-        cacheEl.url.match(conf.url),
+        cacheInfo.url.match(conf.url),
       );
-      if (
-        requestConfig &&
-        respCache &&
-        (!this.hooks.isNeedToInvalidateCached.isUsed() ||
-          this.hooks.isNeedToInvalidateCached.callAsync(cacheEl))
-      ) {
-        continue;
+      if (requestConfig && respCache) {
+        if (!this.hooks.isNeedToInvalidateCached.isUsed()) continue;
+        const { result } = await this.hooks.isNeedToInvalidateCached.promise({
+          cacheInfo,
+          requestConfig,
+          result: true,
+        });
+        if (!result) continue;
       }
 
-      fetch(cacheEl.url, JSON.parse(cacheEl.options)).then((response) => {
+      fetch(cacheInfo.url, JSON.parse(cacheInfo.options)).then((response) => {
         this.updateRequestCache({
-          url: cacheEl.url,
-          options: cacheEl.options,
+          url: cacheInfo.url,
+          options: cacheInfo.options,
           requestConfig,
           response,
           isInvalidation: true,
