@@ -1,7 +1,8 @@
+import { ExpirationPlugin } from "services/SWProcessingPlugins/ExpirationPlugin";
+import { EarlyInvalidationPlugin } from "services/SWProcessingPlugins/EarlyInvalidationPlugin";
+import { InvalidationThresholdPlugin } from "services/SWProcessingPlugins/InvalidationThresholdPlugin";
+
 import diContainer from "./di";
-import { ExpirationPlugin } from "./services/SWProcessingPlugins/ExpirationPlugin";
-import { EarlyInvalidationPlugin } from "./services/SWProcessingPlugins/EarlyInvalidationPlugin";
-import { InvalidationThresholdPlugin } from "./services/SWProcessingPlugins/InvalidationThresholdPlugin";
 
 const SWProcessingPipe = diContainer.get("SWProcessingPipe");
 

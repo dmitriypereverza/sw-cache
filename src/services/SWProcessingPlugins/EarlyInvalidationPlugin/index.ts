@@ -1,5 +1,6 @@
+import { getUnixTime } from "storage/IndexDBStorage";
+
 import { HooksType, SWPipePluginInterface } from "../../SWProcessingPipe";
-import { getUnixTime } from "../../../storage/IndexDBStorage";
 
 export class EarlyInvalidationPlugin implements SWPipePluginInterface {
   init(hooks: HooksType): void {

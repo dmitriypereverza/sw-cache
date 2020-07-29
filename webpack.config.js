@@ -6,12 +6,16 @@ module.exports = {
     rules: [
       {
         test: /\.ts?$/,
-        use: "ts-loader"
+        use: "ts-loader",
       },
     ],
   },
   resolve: {
     extensions: [".ts", ".js"],
+    alias: {
+      services: path.resolve(__dirname, "./src/services"),
+      storage: path.resolve(__dirname, "./src/storage"),
+    },
   },
   output: {
     filename: "sw.js",

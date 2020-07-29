@@ -4,18 +4,16 @@ import {
   AsyncSeriesWaterfallHook,
 } from "tapable";
 import throttle from "lodash/throttle";
+import { DataStorageInterface } from "storage";
+import { getUnixTime, RequestCacheRow } from "storage/IndexDBStorage";
 
-import { DataStorageInterface } from "../../storage";
 import { RequestSerializerInterface } from "../requestSerializer";
-import { getUnixTime } from "../../storage/IndexDBStorage";
 
 export interface SWPipePluginInterface {
   init: (hooks: HooksType) => void;
 }
-interface RequestCacheConfig {
+interface RequestCacheConfig extends Record<string, any> {
   url: string;
-  expireTime: number;
-  invalidateTime: number;
 }
 
 export interface HooksType {
@@ -26,10 +24,24 @@ export interface HooksType {
   onCachingRequest: AsyncSeriesHook;
   onPostRequestProcessing: AsyncSeriesHook;
   onBackgroundTask: AsyncParallelHook;
-  isNeedToSendCachedResponse: AsyncSeriesWaterfallHook;
-  isNeedToInvalidateCached: AsyncSeriesWaterfallHook;
+  isNeedToSendCachedResponse: AsyncSeriesWaterfallHook<{
+    request: Request;
+    cacheInfo: RequestCacheRow;
+    requestConfig: RequestCacheConfig;
+    result: boolean;
+  }>;
+  isNeedToInvalidateCached: AsyncSeriesWaterfallHook<{
+    cacheInfo: RequestCacheRow;
+    requestConfig: RequestCacheConfig;
+    result: boolean;
+  }>;
   onAfterFetch: AsyncParallelHook;
-  onInsertCacheParams: AsyncSeriesWaterfallHook;
+  onInsertCacheParams: AsyncSeriesWaterfallHook<{
+    params: any;
+    cacheInfo: RequestCacheRow;
+    requestConfig: RequestCacheConfig;
+    isInvalidation?: boolean;
+  }>;
 }
 
 export class SWProcessingPipe {
