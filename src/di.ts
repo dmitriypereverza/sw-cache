@@ -42,7 +42,7 @@ export default buildContainer<{
     // plugins
     markovPredictionPlugin: {
       class: MarkovPredictionPlugin,
-      parameters: ["@dataStorageService", "#rangeTimeForRelatedRequests"],
+      parameters: ["4", "@dataStorageService", "#rangeTimeForRelatedRequests"],
     },
     expirationPlugin: {
       class: ExpirationPlugin,

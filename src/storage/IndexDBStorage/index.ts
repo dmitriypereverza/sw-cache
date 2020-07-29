@@ -65,8 +65,8 @@ export class IndexDBStorage implements DataStorageInterface {
     });
   }
 
-  public getMarkovRowByUrl(url: string): Promise<string[]> {
-    return new Promise<string[]>((resolve, reject) => {
+  public getMarkovRowByUrl(url: string): Promise<Record<string, number>> {
+    return new Promise<Record<string, number>>((resolve, reject) => {
       const tx = this.db.transaction(["markov_map"], "readonly");
       const markovMap = tx.objectStore("markov_map");
       const markovQuery = markovMap.get(url);
@@ -101,7 +101,7 @@ export class IndexDBStorage implements DataStorageInterface {
 
   public createOrUpdateMarkovRow(
     currentUrl: string,
-    data: Record<string, Record<string, string[]>>,
+    data: Record<string, number>,
   ): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
       const tx = this.db.transaction(["markov_map"], "readwrite");

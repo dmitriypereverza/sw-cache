@@ -23,23 +23,32 @@ export interface HooksType {
   onFetch: AsyncParallelHook;
   onCachingRequest: AsyncSeriesHook;
   onPostRequestProcessing: AsyncSeriesHook<{
+    fetchEventHash: string;
     request: Request;
     requestConfig: RequestCacheConfig;
   }>;
-  onBackgroundTask: AsyncParallelHook;
+  onBackgroundTaskStart: AsyncParallelHook<{
+    fetchEventHash?: string;
+  }>;
+  onBackgroundTaskEnd: AsyncParallelHook<{
+    fetchEventHash?: string;
+  }>;
   isNeedToSendCachedResponse: AsyncSeriesWaterfallHook<{
+    fetchEventHash: string;
     request: Request;
     cacheInfo: RequestCacheRow;
     requestConfig: RequestCacheConfig;
     resultWeight: number;
   }>;
   isNeedToInvalidateCached: AsyncSeriesWaterfallHook<{
+    fetchEventHash?: string;
     cacheInfo: RequestCacheRow;
     requestConfig: RequestCacheConfig;
     resultWeight: number;
   }>;
   onAfterFetch: AsyncParallelHook;
   onInsertCacheParams: AsyncSeriesWaterfallHook<{
+    fetchEventHash?: string;
     params: any;
     cacheInfo: RequestCacheRow;
     requestConfig: RequestCacheConfig;
@@ -68,17 +77,22 @@ export class SWProcessingPipe {
       onFetch: new AsyncParallelHook(["request"]),
       onCachingRequest: new AsyncSeriesHook(["request", "requestConfig"]),
       onPostRequestProcessing: new AsyncSeriesHook(["args"]),
-      onBackgroundTask: new AsyncParallelHook(),
+      onBackgroundTaskStart: new AsyncParallelHook(["args"]),
+      onBackgroundTaskEnd: new AsyncParallelHook(["args"]),
       isNeedToSendCachedResponse: new AsyncSeriesWaterfallHook(["args"]),
       isNeedToInvalidateCached: new AsyncSeriesWaterfallHook(["args"]),
       onAfterFetch: new AsyncParallelHook(["args"]),
       onInsertCacheParams: new AsyncSeriesWaterfallHook(["args"]),
     };
 
-    this.trottledFunc = throttle(() => this.checkInvalidateCandidates(), 2000, {
-      trailing: true,
-      leading: false,
-    });
+    this.trottledFunc = throttle(
+      (data) => this.checkInvalidateCandidates(data),
+      2000,
+      {
+        trailing: true,
+        leading: false,
+      },
+    );
     this.dataStorageService.load();
   }
 
@@ -108,7 +122,9 @@ export class SWProcessingPipe {
   }
 
   public onFetchEvent(event: any) {
-    this.hooks.onFetch.isUsed() && this.hooks.onFetch.promise(event.request);
+    const fetchEventHash = Math.random().toString(36);
+    this.hooks.onFetch.isUsed() &&
+      this.hooks.onFetch.promise(fetchEventHash, event.request);
 
     if (!this.config) return;
     const requestConfig = this.config.list.find((conf) =>
@@ -116,21 +132,31 @@ export class SWProcessingPipe {
     );
 
     if (requestConfig) {
-      event.respondWith(this.runRequestPipe(event.request, requestConfig));
+      event.respondWith(
+        this.runRequestPipe(fetchEventHash, event.request, requestConfig),
+      );
 
-      if (this.hooks.onPostRequestProcessing.isUsed()) {
-        event.waitUntil(
-          this.hooks.onPostRequestProcessing.callAsync({
-            request: event.request,
-            requestConfig,
-          }),
-        );
-      }
+      event.waitUntil(
+        Promise.all([
+          this.hooks.onPostRequestProcessing.isUsed()
+            ? this.hooks.onPostRequestProcessing.promise({
+                fetchEventHash,
+                request: event.request,
+                requestConfig,
+              })
+            : Promise.resolve(),
+          this.checkInvalidateCandidates(fetchEventHash),
+        ]),
+      );
     }
     event.waitUntil(this.trottledFunc());
   }
 
-  public async runRequestPipe(request, requestConfig: RequestCacheConfig) {
+  public async runRequestPipe(
+    fetchEventHash,
+    request,
+    requestConfig: RequestCacheConfig,
+  ) {
     const cache = await caches.open(this.cacheId);
     const cachedEl = await cache.match(request);
     const cacheInfo = await this.dataStorageService.getRequestCacheInfo(
@@ -144,6 +170,7 @@ export class SWProcessingPipe {
       const {
         resultWeight,
       } = await this.hooks.isNeedToSendCachedResponse.promise({
+        fetchEventHash,
         request,
         cacheInfo,
         requestConfig,
@@ -157,6 +184,7 @@ export class SWProcessingPipe {
     const response = await fetch(request);
 
     this.updateRequestCache({
+      fetchEventHash,
       url: request.url,
       options: await this.requestSerializerService.serialize(request),
       requestConfig,
@@ -167,10 +195,10 @@ export class SWProcessingPipe {
     return response;
   }
 
-  async checkInvalidateCandidates() {
+  async checkInvalidateCandidates(fetchEventHash?: string) {
     console.log("checkInvalidateCandidates");
-    if (this.hooks.onBackgroundTask.isUsed()) {
-      this.hooks.onBackgroundTask.call();
+    if (this.hooks.onBackgroundTaskStart.isUsed()) {
+      this.hooks.onBackgroundTaskStart.call({ fetchEventHash });
     }
     const cache = await caches.open(this.cacheId);
     const cacheList = await this.dataStorageService.getAllRequestCacheInfo();
@@ -186,6 +214,7 @@ export class SWProcessingPipe {
         const {
           resultWeight,
         } = await this.hooks.isNeedToInvalidateCached.promise({
+          fetchEventHash,
           cacheInfo,
           requestConfig,
           resultWeight: 0,
@@ -195,6 +224,7 @@ export class SWProcessingPipe {
 
       fetch(cacheInfo.url, JSON.parse(cacheInfo.options)).then((response) => {
         this.updateRequestCache({
+          fetchEventHash,
           url: cacheInfo.url,
           options: cacheInfo.options,
           requestConfig,
@@ -203,15 +233,21 @@ export class SWProcessingPipe {
         });
       });
     }
+
+    if (this.hooks.onBackgroundTaskEnd.isUsed()) {
+      this.hooks.onBackgroundTaskEnd.callAsync({ fetchEventHash });
+    }
   }
 
   async updateRequestCache({
+    fetchEventHash,
     requestConfig,
     url,
     options,
     response,
     isInvalidation,
   }: {
+    fetchEventHash: string;
     url: string;
     options: string;
     requestConfig: RequestCacheConfig;
@@ -229,6 +265,7 @@ export class SWProcessingPipe {
       const {
         params: extendedParam,
       } = await this.hooks.onInsertCacheParams.promise({
+        fetchEventHash,
         cacheInfo,
         params,
         requestConfig,
