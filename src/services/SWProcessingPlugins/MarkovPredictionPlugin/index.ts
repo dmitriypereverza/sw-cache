@@ -48,7 +48,8 @@ export class MarkovPredictionPlugin implements SWPipePluginInterface {
           ...args,
           result:
             resultWeight +
-            (nextRequestChance > requestConfig.invalidateIfPredictedMoreThen
+            (resultWeight &&
+            nextRequestChance > requestConfig.invalidateIfPredictedMoreThen
               ? +this.invalidationWeight
               : 0),
         };

@@ -13,13 +13,14 @@ export class EarlyInvalidationPlugin implements SWPipePluginInterface {
         if (!cacheInfo || !cacheInfo.invalidateTime) {
           return Promise.resolve(args);
         }
+        console.log("invalid", cacheInfo.invalidateTime - getUnixTime());
         return Promise.resolve({
           ...args,
-          result:
+          resultWeight:
             resultWeight +
             (getUnixTime() > cacheInfo.invalidateTime
-              ? this.invalidationWeight
-              : -this.invalidationWeight),
+              ? +this.invalidationWeight
+              : 0),
         });
       },
     );

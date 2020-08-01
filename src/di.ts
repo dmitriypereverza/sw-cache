@@ -4,7 +4,6 @@ import {
   RequestSerializer,
   RequestSerializerInterface,
 } from "services/requestSerializer";
-import { DataStorageInterface } from "storage";
 import { SWProcessingPipe } from "services/SWProcessingPipe";
 import { MarkovPredictionPlugin } from "services/SWProcessingPlugins/MarkovPredictionPlugin";
 import { ExpirationPlugin } from "services/SWProcessingPlugins/ExpirationPlugin";
@@ -12,7 +11,7 @@ import { EarlyInvalidationPlugin } from "services/SWProcessingPlugins/EarlyInval
 import { InvalidationThresholdPlugin } from "services/SWProcessingPlugins/InvalidationThresholdPlugin";
 
 export default buildContainer<{
-  dataStorageService: DataStorageInterface;
+  dataStorageService: IndexDBStorage;
   requestSerializerService: RequestSerializerInterface;
   SWProcessingPipe: SWProcessingPipe;
   markovPredictionPlugin: MarkovPredictionPlugin;
@@ -21,7 +20,7 @@ export default buildContainer<{
   invalidationThresholdPlugin: InvalidationThresholdPlugin;
 }>({
   params: {
-    cacheId: "v1",
+    cacheId: "sw-cache",
     rangeTimeForRelatedRequests: 30,
   },
   classes: {
@@ -40,10 +39,6 @@ export default buildContainer<{
       class: RequestSerializer,
     },
     // plugins
-    markovPredictionPlugin: {
-      class: MarkovPredictionPlugin,
-      parameters: ["4", "@dataStorageService", "#rangeTimeForRelatedRequests"],
-    },
     expirationPlugin: {
       class: ExpirationPlugin,
       parameters: ["1"],
@@ -55,6 +50,10 @@ export default buildContainer<{
     invalidationThresholdPlugin: {
       class: InvalidationThresholdPlugin,
       parameters: ["2"],
+    },
+    markovPredictionPlugin: {
+      class: MarkovPredictionPlugin,
+      parameters: ["4", "@dataStorageService", "#rangeTimeForRelatedRequests"],
     },
   },
 });

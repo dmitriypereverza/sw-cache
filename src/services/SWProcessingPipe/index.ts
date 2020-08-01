@@ -4,10 +4,15 @@ import {
   AsyncSeriesWaterfallHook,
 } from "tapable";
 import throttle from "lodash/throttle";
-import { DataStorageInterface } from "storage";
-import { getUnixTime, RequestCacheRow } from "storage/IndexDBStorage";
+import {
+  getUnixTime,
+  IndexDBStorage,
+  RequestCacheRow,
+} from "storage/IndexDBStorage";
+import { assoc, pathEq } from "ramda";
 
 import { RequestSerializerInterface } from "../requestSerializer";
+import { getStickyPromisesBuilder } from "../../libs/joinablePromises";
 
 export interface SWPipePluginInterface {
   init: (hooks: HooksType) => void;
@@ -57,17 +62,23 @@ export interface HooksType {
 }
 
 export class SWProcessingPipe {
-  // @ts-ignore
-  private plugins: PluginInterface[];
+  private plugins: any[];
   private config: {
     list: RequestCacheConfig[];
   };
-  private hooks: HooksType;
-  private trottledFunc: any;
+  private readonly hooks: HooksType;
+  private readonly throttledFunc: any;
+  private readonly innerFetch: (
+    promiseHandler: (
+      resolve: (data: any) => void,
+      reject?: (data: any) => void,
+    ) => void,
+    key: string,
+  ) => Promise<Response>;
 
   constructor(
     private cacheId: string,
-    private dataStorageService: DataStorageInterface,
+    private dataStorageService: IndexDBStorage,
     private requestSerializerService: RequestSerializerInterface,
   ) {
     this.hooks = {
@@ -85,9 +96,11 @@ export class SWProcessingPipe {
       onInsertCacheParams: new AsyncSeriesWaterfallHook(["args"]),
     };
 
-    this.trottledFunc = throttle(
+    this.innerFetch = getStickyPromisesBuilder();
+
+    this.throttledFunc = throttle(
       (data) => this.checkInvalidateCandidates(data),
-      2000,
+      3000,
       {
         trailing: true,
         leading: false,
@@ -113,12 +126,26 @@ export class SWProcessingPipe {
     this.hooks.onActive.isUsed() && this.hooks.onActive.callAsync();
   }
 
-  public onMessage(type: string, payload: any) {
+  public async onMessage(type: string, payload: any) {
     if (type === "config") {
       this.config = payload;
+      this.deleteUnusedCache();
     }
     this.hooks.onMessage.isUsed() &&
       this.hooks.onMessage.callAsync(type, payload);
+  }
+
+  private async deleteUnusedCache() {
+    const cacheStorage = await caches.open(this.cacheId);
+    cacheStorage.keys().then((cacheNames) =>
+      cacheNames.forEach((cachedRequest) => {
+        console.log("cachedUrl", cachedRequest.url);
+        if (!this.getRequestConfig(cachedRequest.url)) {
+          caches.delete(cachedRequest.url);
+          this.dataStorageService.deleteRequestCacheInfo(cachedRequest.url);
+        }
+      }),
+    );
   }
 
   public onFetchEvent(event: any) {
@@ -127,40 +154,54 @@ export class SWProcessingPipe {
       this.hooks.onFetch.promise(fetchEventHash, event.request);
 
     if (!this.config) return;
-    const requestConfig = this.config.list.find((conf) =>
-      event.request.url.match(conf.url),
-    );
-
-    if (requestConfig) {
-      event.respondWith(
-        this.runRequestPipe(fetchEventHash, event.request, requestConfig),
-      );
-
-      event.waitUntil(
-        Promise.all([
-          this.hooks.onPostRequestProcessing.isUsed()
-            ? this.hooks.onPostRequestProcessing.promise({
-                fetchEventHash,
-                request: event.request,
-                requestConfig,
-              })
-            : Promise.resolve(),
-          this.checkInvalidateCandidates(fetchEventHash),
-        ]),
-      );
+    const requestConfig = this.getRequestConfig(event.request.url);
+    if (!requestConfig) {
+      event.waitUntil(this.throttledFunc());
+      return;
     }
-    event.waitUntil(this.trottledFunc());
+
+    event.respondWith(
+      this.runCachedRequestPipe(
+        fetchEventHash,
+        event.request,
+        requestConfig,
+      ).then((response) => {
+        event.waitUntil(
+          Promise.all([
+            this.hooks.onPostRequestProcessing.isUsed()
+              ? this.hooks.onPostRequestProcessing.promise({
+                  fetchEventHash,
+                  request: event.request,
+                  requestConfig,
+                })
+              : Promise.resolve(),
+            this.checkInvalidateCandidates(fetchEventHash, event.request.url),
+          ]),
+        );
+        return response;
+      }),
+    );
   }
 
-  public async runRequestPipe(
+  public async runCachedRequestPipe(
     fetchEventHash,
     request,
     requestConfig: RequestCacheConfig,
   ) {
-    const cache = await caches.open(this.cacheId);
-    const cachedEl = await cache.match(request);
+    const cacheStorage = await caches.open(this.cacheId);
+    const cachedEl = await cacheStorage.match(request);
     const cacheInfo = await this.dataStorageService.getRequestCacheInfo(
       request.url,
+    );
+
+    const isRequestExecuting = pathEq(["status"], "pending", cacheInfo);
+    if (isRequestExecuting) {
+      return this.executeRequest(() => fetch(request), request.url);
+    }
+
+    await this.dataStorageService.createOrUpdateRequestCache(
+      request.url,
+      assoc("status", "pending", cacheInfo),
     );
 
     if (cachedEl) {
@@ -177,15 +218,23 @@ export class SWProcessingPipe {
         resultWeight: 0,
       });
       if (resultWeight > 0) {
+        await this.dataStorageService.createOrUpdateRequestCache(
+          request.url,
+          assoc("status", "none", cacheInfo),
+        );
         return cachedEl;
       }
     }
 
-    const response = await fetch(request);
+    const response = await this.executeRequest(
+      () => fetch(request),
+      request.url,
+    );
 
-    this.updateRequestCache({
+    await this.updateRequestCache({
       fetchEventHash,
       url: request.url,
+      status: "none",
       options: await this.requestSerializerService.serialize(request),
       requestConfig,
       response: response.clone(),
@@ -195,37 +244,78 @@ export class SWProcessingPipe {
     return response;
   }
 
-  async checkInvalidateCandidates(fetchEventHash?: string) {
-    console.log("checkInvalidateCandidates");
+  async checkInvalidateCandidates(
+    fetchEventHash?: string,
+    currentUrl?: string,
+  ) {
     if (this.hooks.onBackgroundTaskStart.isUsed()) {
       this.hooks.onBackgroundTaskStart.call({ fetchEventHash });
     }
     const cache = await caches.open(this.cacheId);
     const cacheList = await this.dataStorageService.getAllRequestCacheInfo();
 
-    for (let cacheInfo of cacheList) {
-      let respCache = await cache.match(cacheInfo.url);
+    const isNeedToInvalidateRequest = async (
+      requestConfig,
+      respCache,
+      cacheInfo,
+    ): Promise<boolean> => {
+      if (!requestConfig || !respCache) {
+        return false;
+      }
+      if (!this.hooks.isNeedToInvalidateCached.isUsed()) return false;
+      const {
+        resultWeight,
+      } = await this.hooks.isNeedToInvalidateCached.promise({
+        fetchEventHash,
+        cacheInfo,
+        requestConfig,
+        resultWeight: 0,
+      });
+      console.log("resultWeight", resultWeight);
+      return resultWeight > 0;
+    };
 
-      const requestConfig = this.config.list.find((conf) =>
-        cacheInfo.url.match(conf.url),
-      );
-      if (requestConfig && respCache) {
-        if (!this.hooks.isNeedToInvalidateCached.isUsed()) continue;
-        const {
-          resultWeight,
-        } = await this.hooks.isNeedToInvalidateCached.promise({
-          fetchEventHash,
-          cacheInfo,
-          requestConfig,
-          resultWeight: 0,
-        });
-        if (resultWeight <= 0) continue;
+    for (let cacheInfo of cacheList) {
+      if (currentUrl && currentUrl === cacheInfo.url) {
+        continue;
       }
 
-      fetch(cacheInfo.url, JSON.parse(cacheInfo.options)).then((response) => {
+      const executeRequest = () =>
+        this.executeRequest(
+          () => fetch(cacheInfo.url, JSON.parse(cacheInfo.options)),
+          cacheInfo.url,
+        );
+
+      const isRequestExecuting = pathEq(["status"], "pending", cacheInfo);
+      if (isRequestExecuting) {
+        return;
+      }
+
+      await this.dataStorageService.createOrUpdateRequestCache(
+        cacheInfo.url,
+        assoc("status", "pending", cacheInfo),
+      );
+      const respCache = await cache.match(cacheInfo.url);
+      const requestConfig = this.getRequestConfig(cacheInfo.url);
+      const needInvalidate = await isNeedToInvalidateRequest(
+        requestConfig,
+        respCache,
+        cacheInfo,
+      );
+
+      if (!needInvalidate) {
+        await this.dataStorageService.createOrUpdateRequestCache(
+          cacheInfo.url,
+          assoc("status", "none", cacheInfo),
+        );
+        continue;
+      }
+
+      executeRequest().then((response) => {
         this.updateRequestCache({
           fetchEventHash,
           url: cacheInfo.url,
+          status: "none",
           options: cacheInfo.options,
           requestConfig,
           response,
@@ -244,19 +334,22 @@ export class SWProcessingPipe {
     requestConfig,
     url,
     options,
+    status,
     response,
     isInvalidation,
   }: {
     fetchEventHash: string;
     url: string;
+    status: string;
     options: string;
     requestConfig: RequestCacheConfig;
     response: Response;
     isInvalidation?: boolean;
   }) {
     let params = {
-      url: url,
-      options: options,
+      url,
+      status,
+      options,
       timestamp: getUnixTime(),
     };
 
@@ -276,5 +369,19 @@ export class SWProcessingPipe {
 
     this.dataStorageService.createOrUpdateRequestCache(url, params as any);
     (await caches.open(this.cacheId)).put(url, response);
+  }
+
+  private getRequestConfig(url: any): RequestCacheConfig | null {
+    return this.config.list.find((conf) => url.match(conf.url));
+  }
+
+  private executeRequest(
+    promiseFunc: () => Promise<Response>,
+    url: string,
+  ): Promise<Response> {
+    return this.innerFetch(
+      (resolve, reject) => promiseFunc().then(resolve, reject),
+      url,
+    ).then((response) => response.clone());
   }
 }

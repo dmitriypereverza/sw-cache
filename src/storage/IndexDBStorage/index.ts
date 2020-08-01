@@ -4,6 +4,8 @@ export function getUnixTime() {
   return Math.round(new Date().getTime() / 1000);
 }
 
+export type LockRequestType = "expiration" | "invalidation" | "none";
+
 export interface RequestCacheRow {
   url: string;
   options: string;
@@ -23,11 +25,12 @@ export class IndexDBStorage implements DataStorageInterface {
   public load() {
     return new Promise<IDBDatabase>((resolve, reject) => {
       if (this.db) resolve(this.db);
-      const dbReq = indexedDB.open("kss-portal", 1);
+      const dbReq = indexedDB.open("sw-cache", 1);
       dbReq.onupgradeneeded = (event: any) => {
         const db = event.target.result;
         db.createObjectStore("markov_map");
         db.createObjectStore("requests_cache");
+        db.createObjectStore("requests_blocks");
         db.createObjectStore("requests", { autoIncrement: true }).createIndex(
           "timestamp",
           "timestamp",
@@ -65,22 +68,6 @@ export class IndexDBStorage implements DataStorageInterface {
     });
   }
 
-  public getMarkovRowByUrl(url: string): Promise<Record<string, number>> {
-    return new Promise<Record<string, number>>((resolve, reject) => {
-      const tx = this.db.transaction(["markov_map"], "readonly");
-      const markovMap = tx.objectStore("markov_map");
-      const markovQuery = markovMap.get(url);
-
-      markovQuery.onsuccess = function (markovEvent: any) {
-        const markovElement = markovEvent.target.result;
-        resolve(markovElement);
-      };
-      markovQuery.onerror = function (event: any) {
-        reject(event.target.errorCode);
-      };
-    });
-  }
-
   public createRequestLog(url: string): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
       const tx = this.db.transaction(["requests"], "readwrite");
@@ -94,6 +81,22 @@ export class IndexDBStorage implements DataStorageInterface {
         resolve(!!ev.target.result);
       };
       requestsQuery.onerror = function (event: any) {
+        reject(event.target.errorCode);
+      };
+    });
+  }
+
+  public getMarkovRowByUrl(url: string): Promise<Record<string, number>> {
+    return new Promise<Record<string, number>>((resolve, reject) => {
+      const tx = this.db.transaction(["markov_map"], "readonly");
+      const markovMap = tx.objectStore("markov_map");
+      const markovQuery = markovMap.get(url);
+
+      markovQuery.onsuccess = function (markovEvent: any) {
+        const markovElement = markovEvent.target.result;
+        resolve(markovElement);
+      };
+      markovQuery.onerror = function (event: any) {
         reject(event.target.errorCode);
       };
     });
@@ -124,6 +127,20 @@ export class IndexDBStorage implements DataStorageInterface {
       const requestsCacheStore = tx.objectStore("requests_cache");
       const requestsCacheQuery = requestsCacheStore.get(currentUrl);
 
+      requestsCacheQuery.onsuccess = function (ev: any) {
+        resolve(ev.target.result);
+      };
+      requestsCacheQuery.onerror = function (event: any) {
+        reject(event.target.errorCode);
+      };
+    });
+  }
+
+  public deleteRequestCacheInfo(currentUrl: string): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
+      const tx = this.db.transaction(["requests_cache"], "readwrite");
+      const requestsCacheStore = tx.objectStore("requests_cache");
+      const requestsCacheQuery = requestsCacheStore.delete(currentUrl);
       requestsCacheQuery.onsuccess = function (ev: any) {
         resolve(ev.target.result);
       };

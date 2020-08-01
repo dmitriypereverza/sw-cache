@@ -6,7 +6,7 @@ SWProcessingPipe.setPlugins([
   diContainer.get("expirationPlugin"),
   diContainer.get("earlyInvalidationPlugin"),
   diContainer.get("invalidationThresholdPlugin"),
-  diContainer.get("markovPredictionPlugin"),
+  // diContainer.get("markovPredictionPlugin"),
 ]);
 
 self.addEventListener("install", () => SWProcessingPipe.onInstall());

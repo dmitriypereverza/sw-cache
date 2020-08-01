@@ -30,8 +30,8 @@ export class InvalidationThresholdPlugin implements SWPipePluginInterface {
         }
 
         const pluginWeight =
-          cacheInfo.invalidateCount <= requestConfig.invalidateCount
-            ? this.invalidationWeight
+          cacheInfo.invalidateCount < requestConfig.invalidateCount
+            ? 0
             : -this.invalidationWeight;
 
         return Promise.resolve({
