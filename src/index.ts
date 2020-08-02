@@ -14,7 +14,7 @@ self.addEventListener("install", () => SWProcessingPipe.onInstall());
 self.addEventListener("activate", () => SWProcessingPipe.onActivate());
 
 self.addEventListener("message", (event: any) => {
-  SWProcessingPipe.onMessage(event.data.type, event.data.payload);
+  SWProcessingPipe.onMessage(event.data.type, event.data.payload, event);
 });
 
 self.addEventListener("fetch", (ev) => SWProcessingPipe.onFetchEvent(ev));

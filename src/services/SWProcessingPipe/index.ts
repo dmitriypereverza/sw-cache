@@ -75,6 +75,7 @@ export class SWProcessingPipe {
     ) => void,
     key: string,
   ) => Promise<Response>;
+  private logClient: any;
 
   constructor(
     private cacheId: string,
@@ -126,13 +127,18 @@ export class SWProcessingPipe {
     this.hooks.onActive.isUsed() && this.hooks.onActive.callAsync();
   }
 
-  public async onMessage(type: string, payload: any) {
+  public async onMessage(type: string, payload: any, event) {
+    this.hooks.onMessage.isUsed() &&
+      this.hooks.onMessage.callAsync(type, payload);
+
+    if (event.ports[0]) {
+      this.logClient = event.ports[0];
+    }
+
     if (type === "config") {
       this.config = payload;
       this.deleteUnusedCache();
     }
-    this.hooks.onMessage.isUsed() &&
-      this.hooks.onMessage.callAsync(type, payload);
   }
 
   private async deleteUnusedCache() {
@@ -194,6 +200,11 @@ export class SWProcessingPipe {
       request.url,
     );
 
+    this.logClient.postMessage({
+      url: request.url,
+      type: "fetch",
+    });
+
     const isRequestExecuting = pathEq(["status"], "pending", cacheInfo);
     if (isRequestExecuting) {
       return this.executeRequest(() => fetch(request), request.url);
@@ -218,6 +229,10 @@ export class SWProcessingPipe {
         resultWeight: 0,
       });
       if (resultWeight > 0) {
+        this.logClient.postMessage({
+          url: request.url,
+          type: "fromCache",
+        });
         await this.dataStorageService.createOrUpdateRequestCache(
           request.url,
           assoc("status", "none", cacheInfo),
@@ -226,6 +241,10 @@ export class SWProcessingPipe {
       }
     }
 
+    this.logClient.postMessage({
+      url: request.url,
+      type: "executeRequest",
+    });
     const response = await this.executeRequest(
       () => fetch(request),
       request.url,
@@ -271,7 +290,6 @@ export class SWProcessingPipe {
         requestConfig,
         resultWeight: 0,
       });
-      console.log("resultWeight", resultWeight);
       return resultWeight > 0;
     };
 
@@ -310,6 +328,10 @@ export class SWProcessingPipe {
         );
         continue;
       }
+      this.logClient.postMessage({
+        url: cacheInfo.url,
+        type: "invalidate",
+      });
 
       executeRequest().then((response) => {
         this.updateRequestCache({
