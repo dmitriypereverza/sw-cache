@@ -122,7 +122,7 @@ export class SWProcessingPipe {
     this.hooks.onInstall.isUsed() && this.hooks.onInstall.callAsync();
   }
 
-  public onActivate() {
+  public onActivate(_event: any) {
     console.log("Активирован");
     this.hooks.onActive.isUsed() && this.hooks.onActive.callAsync();
   }
@@ -131,7 +131,7 @@ export class SWProcessingPipe {
     this.hooks.onMessage.isUsed() &&
       this.hooks.onMessage.callAsync(type, payload);
 
-    if (event.ports[0]) {
+    if (type === "logConnect" && event.ports[0]) {
       this.logClient = event.ports[0];
     }
 
@@ -145,7 +145,6 @@ export class SWProcessingPipe {
     const cacheStorage = await caches.open(this.cacheId);
     cacheStorage.keys().then((cacheNames) =>
       cacheNames.forEach((cachedRequest) => {
-        console.log("cachedUrl", cachedRequest.url);
         if (!this.getRequestConfig(cachedRequest.url)) {
           caches.delete(cachedRequest.url);
           this.dataStorageService.deleteRequestCacheInfo(cachedRequest.url);

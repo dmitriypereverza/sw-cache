@@ -44,11 +44,15 @@ export class MarkovPredictionPlugin implements SWPipePluginInterface {
           cacheInfo.url,
         );
 
+        // console.log(
+        //   cacheInfo.url,
+        //   `Шанс запроса ${nextRequestChance.toFixed(2)}%`,
+        // );
         return {
           ...args,
-          result:
+          resultWeight:
             resultWeight +
-            (resultWeight &&
+            (resultWeight <= 0 &&
             nextRequestChance > requestConfig.invalidateIfPredictedMoreThen
               ? +this.invalidationWeight
               : 0),
