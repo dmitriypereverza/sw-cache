@@ -19,6 +19,7 @@ module.exports = {
   },
   output: {
     filename: "sw.js",
-    path: path.resolve(__dirname, "../"),
+    // path: path.resolve(__dirname, "../"),
+    path: path.resolve(__dirname, "./tests/fakeSite/public"),
   },
 };

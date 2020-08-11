@@ -68,14 +68,18 @@ export class SWProcessingPipe {
   };
   private readonly hooks: HooksType;
   private readonly throttledFunc: any;
-  private readonly innerFetch: (
-    promiseHandler: (
-      resolve: (data: any) => void,
-      reject?: (data: any) => void,
-    ) => void,
-    key: string,
-  ) => Promise<Response>;
+
   private logClient: any;
+  private innerFetch: {
+    isExecute: (key: string) => boolean;
+    run: (
+      promiseHandler: (
+        resolve: (data: any) => void,
+        reject?: (data: any) => void,
+      ) => void,
+      key: string,
+    ) => Promise<any>;
+  };
 
   constructor(
     private cacheId: string,
@@ -186,6 +190,7 @@ export class SWProcessingPipe {
         return response;
       }),
     );
+    event.waitUntil(this.throttledFunc());
   }
 
   public async runCachedRequestPipe(
@@ -199,13 +204,12 @@ export class SWProcessingPipe {
       request.url,
     );
 
-    this.logClient.postMessage({
-      url: request.url,
-      type: "fetch",
-    });
-
-    const isRequestExecuting = pathEq(["status"], "pending", cacheInfo);
-    if (isRequestExecuting) {
+    if (this.innerFetch.isExecute(request.url)) {
+      this.logClient &&
+        this.logClient.postMessage({
+          url: request.url,
+          type: "joinedRequest",
+        });
       return this.executeRequest(() => fetch(request), request.url);
     }
 
@@ -228,10 +232,11 @@ export class SWProcessingPipe {
         resultWeight: 0,
       });
       if (resultWeight > 0) {
-        this.logClient.postMessage({
-          url: request.url,
-          type: "fromCache",
-        });
+        this.logClient &&
+          this.logClient.postMessage({
+            url: request.url,
+            type: "fromCache",
+          });
         await this.dataStorageService.createOrUpdateRequestCache(
           request.url,
           assoc("status", "none", cacheInfo),
@@ -240,10 +245,11 @@ export class SWProcessingPipe {
       }
     }
 
-    this.logClient.postMessage({
-      url: request.url,
-      type: "executeRequest",
-    });
+    this.logClient &&
+      this.logClient.postMessage({
+        url: request.url,
+        type: "executeRequest",
+      });
     const response = await this.executeRequest(
       () => fetch(request),
       request.url,
@@ -327,10 +333,11 @@ export class SWProcessingPipe {
         );
         continue;
       }
-      this.logClient.postMessage({
-        url: cacheInfo.url,
-        type: "invalidate",
-      });
+      this.logClient &&
+        this.logClient.postMessage({
+          url: cacheInfo.url,
+          type: "invalidate",
+        });
 
       executeRequest().then((response) => {
         this.updateRequestCache({
@@ -400,9 +407,8 @@ export class SWProcessingPipe {
     promiseFunc: () => Promise<Response>,
     url: string,
   ): Promise<Response> {
-    return this.innerFetch(
-      (resolve, reject) => promiseFunc().then(resolve, reject),
-      url,
-    ).then((response) => response.clone());
+    return this.innerFetch
+      .run((resolve, reject) => promiseFunc().then(resolve, reject), url)
+      .then((response) => response.clone());
   }
 }
