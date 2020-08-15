@@ -1,3 +1,4 @@
+import { values } from "ramda";
 import { DataStorageInterface } from "storage";
 
 import { HooksType, SWPipePluginInterface } from "../../SWProcessingPipe";
@@ -7,7 +8,7 @@ export class MarkovPredictionPlugin implements SWPipePluginInterface {
   constructor(
     private invalidationWeight: number,
     private dataStorageService: DataStorageInterface,
-    private rangeTimeForRelatedRequests: number,
+    private rangeTimeForRelatedRequests: number
   ) {
     this.dataStorageService.load();
     this.activeFetchEvents = new Map();
@@ -26,7 +27,7 @@ export class MarkovPredictionPlugin implements SWPipePluginInterface {
           .catch(console.error);
 
         this.updateMarkovStats(request).catch(console.error);
-      },
+      }
     );
 
     hooks.isNeedToInvalidateCached.tapPromise(
@@ -41,7 +42,7 @@ export class MarkovPredictionPlugin implements SWPipePluginInterface {
 
         const nextRequestChance = await this.getNextRequestChance(
           currentRequest,
-          cacheInfo.url,
+          cacheInfo.url
         );
 
         // console.log(
@@ -57,7 +58,7 @@ export class MarkovPredictionPlugin implements SWPipePluginInterface {
               ? +this.invalidationWeight
               : 0),
         };
-      },
+      }
     );
 
     hooks.onBackgroundTaskEnd.tapAsync(
@@ -66,14 +67,14 @@ export class MarkovPredictionPlugin implements SWPipePluginInterface {
         if (fetchEventHash && this.activeFetchEvents.has(fetchEventHash)) {
           this.activeFetchEvents.delete(fetchEventHash);
         }
-      },
+      }
     );
   }
 
   async updateMarkovStats(request) {
     Promise.all([
       this.dataStorageService.getLastRequestsByFromTime(
-        this.rangeTimeForRelatedRequests,
+        this.rangeTimeForRelatedRequests
       ),
       this.dataStorageService.getMarkovRowByUrl(request.url),
     ]).then(([lastRequests, markovRow]) => {
@@ -91,15 +92,15 @@ export class MarkovPredictionPlugin implements SWPipePluginInterface {
 
   private async getNextRequestChance(
     currentRequestUrl: string,
-    nextRequestUrl: string,
+    nextRequestUrl: string
   ): Promise<number> {
     const markowRow = await this.dataStorageService.getMarkovRowByUrl(
-      currentRequestUrl,
+      currentRequestUrl
     );
     if (!markowRow || markowRow[nextRequestUrl] === undefined) return 0;
 
     const requestTimes = markowRow[nextRequestUrl];
-    const allCount = Object.values(markowRow).reduce((a, b) => a + b, 0);
+    const allCount = values(markowRow).reduce((a, b) => a + b, 0);
 
     if (allCount === 0 || !allCount) return 0;
     return (100 * requestTimes) / allCount;

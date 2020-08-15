@@ -11,8 +11,8 @@ import {
 } from "storage/IndexDBStorage";
 import { assoc, pathEq } from "ramda";
 
-import { RequestSerializerInterface } from "../requestSerializer";
-import { getStickyPromisesBuilder } from "../../libs/joinablePromises";
+import { RequestSerializerInterface } from "./services/requestSerializer";
+import { getStickyPromisesBuilder } from "./libs/joinablePromises";
 
 export interface SWPipePluginInterface {
   init: (hooks: HooksType) => void;
@@ -75,16 +75,16 @@ export class SWProcessingPipe {
     run: (
       promiseHandler: (
         resolve: (data: any) => void,
-        reject?: (data: any) => void,
+        reject?: (data: any) => void
       ) => void,
-      key: string,
+      key: string
     ) => Promise<any>;
   };
 
   constructor(
     private cacheId: string,
     private dataStorageService: IndexDBStorage,
-    private requestSerializerService: RequestSerializerInterface,
+    private requestSerializerService: RequestSerializerInterface
   ) {
     this.hooks = {
       onInstall: new AsyncParallelHook(),
@@ -109,7 +109,7 @@ export class SWProcessingPipe {
       {
         trailing: true,
         leading: false,
-      },
+      }
     );
     this.dataStorageService.load();
   }
@@ -153,7 +153,7 @@ export class SWProcessingPipe {
           caches.delete(cachedRequest.url);
           this.dataStorageService.deleteRequestCacheInfo(cachedRequest.url);
         }
-      }),
+      })
     );
   }
 
@@ -173,7 +173,7 @@ export class SWProcessingPipe {
       this.runCachedRequestPipe(
         fetchEventHash,
         event.request,
-        requestConfig,
+        requestConfig
       ).then((response) => {
         event.waitUntil(
           Promise.all([
@@ -185,10 +185,10 @@ export class SWProcessingPipe {
                 })
               : Promise.resolve(),
             this.checkInvalidateCandidates(fetchEventHash, event.request.url),
-          ]),
+          ])
         );
         return response;
-      }),
+      })
     );
     event.waitUntil(this.throttledFunc());
   }
@@ -196,12 +196,12 @@ export class SWProcessingPipe {
   public async runCachedRequestPipe(
     fetchEventHash,
     request,
-    requestConfig: RequestCacheConfig,
+    requestConfig: RequestCacheConfig
   ) {
     const cacheStorage = await caches.open(this.cacheId);
     const cachedEl = await cacheStorage.match(request);
     const cacheInfo = await this.dataStorageService.getRequestCacheInfo(
-      request.url,
+      request.url
     );
 
     if (this.innerFetch.isExecute(request.url)) {
@@ -215,7 +215,7 @@ export class SWProcessingPipe {
 
     await this.dataStorageService.createOrUpdateRequestCache(
       request.url,
-      assoc("status", "pending", cacheInfo),
+      assoc("status", "pending", cacheInfo)
     );
 
     if (cachedEl) {
@@ -239,7 +239,7 @@ export class SWProcessingPipe {
           });
         await this.dataStorageService.createOrUpdateRequestCache(
           request.url,
-          assoc("status", "none", cacheInfo),
+          assoc("status", "none", cacheInfo)
         );
         return cachedEl;
       }
@@ -252,7 +252,7 @@ export class SWProcessingPipe {
       });
     const response = await this.executeRequest(
       () => fetch(request),
-      request.url,
+      request.url
     );
 
     await this.updateRequestCache({
@@ -270,7 +270,7 @@ export class SWProcessingPipe {
 
   async checkInvalidateCandidates(
     fetchEventHash?: string,
-    currentUrl?: string,
+    currentUrl?: string
   ) {
     if (this.hooks.onBackgroundTaskStart.isUsed()) {
       this.hooks.onBackgroundTaskStart.call({ fetchEventHash });
@@ -281,7 +281,7 @@ export class SWProcessingPipe {
     const isNeedToInvalidateRequest = async (
       requestConfig,
       respCache,
-      cacheInfo,
+      cacheInfo
     ): Promise<boolean> => {
       if (!requestConfig || !respCache) {
         return false;
@@ -306,7 +306,7 @@ export class SWProcessingPipe {
       const executeRequest = () =>
         this.executeRequest(
           () => fetch(cacheInfo.url, JSON.parse(cacheInfo.options)),
-          cacheInfo.url,
+          cacheInfo.url
         );
 
       const isRequestExecuting = pathEq(["status"], "pending", cacheInfo);
@@ -316,20 +316,20 @@ export class SWProcessingPipe {
 
       await this.dataStorageService.createOrUpdateRequestCache(
         cacheInfo.url,
-        assoc("status", "pending", cacheInfo),
+        assoc("status", "pending", cacheInfo)
       );
       const respCache = await cache.match(cacheInfo.url);
       const requestConfig = this.getRequestConfig(cacheInfo.url);
       const needInvalidate = await isNeedToInvalidateRequest(
         requestConfig,
         respCache,
-        cacheInfo,
+        cacheInfo
       );
 
       if (!needInvalidate) {
         await this.dataStorageService.createOrUpdateRequestCache(
           cacheInfo.url,
-          assoc("status", "none", cacheInfo),
+          assoc("status", "none", cacheInfo)
         );
         continue;
       }
@@ -405,7 +405,7 @@ export class SWProcessingPipe {
 
   private executeRequest(
     promiseFunc: () => Promise<Response>,
-    url: string,
+    url: string
   ): Promise<Response> {
     return this.innerFetch
       .run((resolve, reject) => promiseFunc().then(resolve, reject), url)

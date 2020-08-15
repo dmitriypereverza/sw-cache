@@ -8,9 +8,16 @@
 <script>
     const results = [];
 
+    // const requests = [
+    //     ["/r1", 0],
+    //     ["/r1", 500],
+    //     ["/r1", 3000],
+    //     ["/r1", 7000],
+    //     ["/r1", 11000],
+    //     ["/r1", 22000],
+    // ];
     const requests = [
         ["/r1", 0],
-        ["/r1", 500],
         ["/r1", 3000],
         ["/r1", 7000],
         ["/r1", 11000],
@@ -56,7 +63,7 @@
                         {
                             url: /\/r1$/,
                             expireTime: 10,
-                            invalidateTime: 5,
+                            invalidateTime: 1,
                             invalidateCount: 2,
                             invalidateIfPredictedMoreThen: 100,
                         },

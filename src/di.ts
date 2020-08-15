@@ -4,11 +4,11 @@ import {
   RequestSerializer,
   RequestSerializerInterface,
 } from "services/requestSerializer";
-import { SWProcessingPipe } from "services/SWProcessingPipe";
-import { MarkovPredictionPlugin } from "services/SWProcessingPlugins/MarkovPredictionPlugin";
-import { ExpirationPlugin } from "services/SWProcessingPlugins/ExpirationPlugin";
-import { EarlyInvalidationPlugin } from "services/SWProcessingPlugins/EarlyInvalidationPlugin";
-import { InvalidationThresholdPlugin } from "services/SWProcessingPlugins/InvalidationThresholdPlugin";
+import { SWProcessingPipe } from "./SWProcessingPipe";
+import { MarkovPredictionPlugin } from "./plugins/MarkovPredictionPlugin";
+import { ExpirationPlugin } from "./plugins/ExpirationPlugin";
+import { EarlyInvalidationPlugin } from "./plugins/EarlyInvalidationPlugin";
+import { InvalidationThresholdPlugin } from "./plugins/InvalidationThresholdPlugin";
 
 export default buildContainer<{
   dataStorageService: IndexDBStorage;

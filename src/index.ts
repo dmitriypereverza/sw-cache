@@ -5,7 +5,7 @@ const SWProcessingPipe = diContainer.get("SWProcessingPipe");
 SWProcessingPipe.setPlugins([
   diContainer.get("expirationPlugin"),
   diContainer.get("earlyInvalidationPlugin"),
-  // diContainer.get("invalidationThresholdPlugin"),
+  diContainer.get("invalidationThresholdPlugin"),
   // diContainer.get("markovPredictionPlugin"),
 ]);
 
