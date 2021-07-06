@@ -4,7 +4,8 @@
   "description": "",
   "private": true,
   "scripts": {
-    "dev": "webpack -w"
+    "server": "node ./tests/fakeSite/fakeServer.js",
+    "watch": "webpack -w"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,7 @@
     "ts-di-injector": "0.1.1"
   },
   "devDependencies": {
+    "@types/lodash": "^4.14.170",
     "@types/ramda": "^0.27.11",
     "@types/tapable": "^1.0.6",
     "eslint-import-resolver-webpack": "^0.12.2",

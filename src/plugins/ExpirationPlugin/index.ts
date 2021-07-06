@@ -1,3 +1,5 @@
+import { assocPath } from "ramda";
+
 import { getUnixTime } from "storage/IndexDBStorage";
 
 import { HooksType, SWPipePluginInterface } from "../../SWProcessingPipe";
@@ -11,25 +13,26 @@ export class ExpirationPlugin implements SWPipePluginInterface {
       if (!cacheInfo) {
         return Promise.resolve(args);
       }
-      return Promise.resolve({
-        ...args,
-        resultWeight:
-          resultWeight +
-          (getUnixTime() < cacheInfo.expireTime
-            ? this.expirationWeight
-            : -this.expirationWeight),
-      });
+
+      let expirationWeight = resultWeight;
+      if (getUnixTime() < cacheInfo.expireTime) {
+        expirationWeight += this.expirationWeight;
+      } else {
+        expirationWeight -= this.expirationWeight;
+      }
+
+      const result = assocPath(["resultWeight"], expirationWeight, args);
+      return Promise.resolve(result);
     });
 
     hooks.onInsertCacheParams.tapPromise("ExpirationPlugin", async (args) => {
-      const { params, requestConfig } = args;
-      return Promise.resolve({
-        ...args,
-        params: {
-          ...params,
-          expireTime: getUnixTime() + requestConfig.expireTime,
-        },
-      });
+      const { requestConfig } = args;
+      const result = assocPath(
+        ["params", "expireTime"],
+        getUnixTime() + requestConfig.expireTime,
+        args
+      );
+      return Promise.resolve(result);
     });
   }
 }

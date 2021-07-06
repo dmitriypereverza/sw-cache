@@ -18,27 +18,22 @@ export class InvalidationThresholdPlugin implements SWPipePluginInterface {
           }
         }
         return Promise.resolve({ ...args, params });
-      },
+      }
     );
 
     hooks.isNeedToInvalidateCached.tapPromise(
       "InvalidationThresholdPlugin",
       (args) => {
-        const { cacheInfo, requestConfig, resultWeight } = args;
-        if (!cacheInfo || cacheInfo.invalidateCount === undefined) {
+        let { cacheInfo, requestConfig, resultWeight } = args;
+        if (!cacheInfo?.invalidateCount) {
           return Promise.resolve(args);
         }
+        if (cacheInfo.invalidateCount < requestConfig.invalidateCount) {
+          resultWeight -= this.invalidationWeight;
+        }
 
-        const pluginWeight =
-          cacheInfo.invalidateCount < requestConfig.invalidateCount
-            ? 0
-            : -this.invalidationWeight;
-
-        return Promise.resolve({
-          ...args,
-          resultWeight: resultWeight + pluginWeight,
-        });
-      },
+        return Promise.resolve({ ...args, resultWeight });
+      }
     );
   }
 }

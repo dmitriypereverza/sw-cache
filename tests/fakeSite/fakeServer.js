@@ -8,7 +8,7 @@ const handlers = [
   ["/r3", 3000],
 ];
 
-app.use(express.static("public"));
+app.use("/", express.static(__dirname + "/public"));
 
 handlers.forEach(([url, timeout]) => {
   app.get(url, (req, res) => {
@@ -18,6 +18,6 @@ handlers.forEach(([url, timeout]) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`Example app listening at http://localhost:${port}`);
-});
+app.listen(port, () =>
+  console.log(`Example app listening at http://localhost:${port}`)
+);

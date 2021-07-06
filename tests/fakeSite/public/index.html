@@ -1,88 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8"/>
+  <head>
+    <meta charset="UTF-8" />
     <title>Title</title>
-</head>
-<body>
-<script>
-    const results = [];
-
-    // const requests = [
-    //     ["/r1", 0],
-    //     ["/r1", 500],
-    //     ["/r1", 3000],
-    //     ["/r1", 7000],
-    //     ["/r1", 11000],
-    //     ["/r1", 22000],
-    // ];
-    const requests = [
+  </head>
+  <body>
+    <script>
+      const results = [];
+      
+      const requests = [
         ["/r1", 0],
         ["/r1", 3000],
         ["/r1", 7000],
         ["/r1", 11000],
         ["/r1", 20000],
-    ];
+      ];
 
-    function startTests() {
+      function startTests() {
         const promises = requests.map(([url, time]) => {
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    const timeStart = performance.now();
-                    fetch(url).then(() => {
-                        const duration = performance.now() - timeStart;
-                        results.push([url, time, duration]);
-                        resolve();
-                    });
-                }, time);
-            });
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              const timeStart = performance.now();
+              fetch(url).then(() => {
+                const duration = performance.now() - timeStart;
+                results.push([url, time, duration]);
+                resolve();
+              });
+            }, time);
+          });
         });
 
         Promise.all(promises).then(() => {
-            console.table(results);
+          console.table(results);
         });
-    }
+      }
 
-    if ("serviceWorker" in navigator) {
+      if ("serviceWorker" in navigator) {
         navigator.serviceWorker
-            .register("/sw.js")
-            .then(() => navigator.serviceWorker.ready)
-            .then((reg) => {
-                console.log("Registration succeeded. Scope is " + reg.scope);
-            })
-            .catch((error) => console.log("Registration failed with " + error));
+          .register("./sw.js")
+          .then(() => navigator.serviceWorker.ready)
+          .then((reg) =>
+            console.log("Registration succeeded. Scope is " + reg.scope)
+          )
+          .catch((error) => console.log("Registration failed with " + error));
 
         navigator.serviceWorker.ready.then(() => {
-            startTests();
+          startTests();
 
-            if (!navigator.serviceWorker.controller) return;
-            navigator.serviceWorker.controller.postMessage({
-                type: "config",
-                payload: {
-                    list: [
-                        {
-                            url: /\/r1$/,
-                            expireTime: 10,
-                            invalidateTime: 1,
-                            invalidateCount: 2,
-                            invalidateIfPredictedMoreThen: 100,
-                        },
-                    ],
-                },
-            });
-
-
-            const messageChannel = new MessageChannel();
-            messageChannel.port1.onmessage = (ev) => console.log(ev.data);
-            navigator.serviceWorker.controller.postMessage(
+          if (!navigator.serviceWorker.controller) return;
+          navigator.serviceWorker.controller.postMessage({
+            type: "config",
+            payload: {
+              list: [
                 {
-                    type: "logConnect",
-                    payload: {},
+                  url: /\/r1$/,
+                  expireTime: 10,
+                  invalidateTime: 5,
+                  invalidateCount: 2,
+                  invalidateIfPredictedMoreThen: 100,
                 },
-                [messageChannel.port2],
-            );
+              ],
+            },
+          });
+
+          const messageChannel = new MessageChannel();
+          messageChannel.port1.onmessage = (ev) => console.log(ev.data);
+          navigator.serviceWorker.controller.postMessage(
+            {
+              type: "logConnect",
+              payload: {},
+            },
+            [messageChannel.port2]
+          );
         });
-    }
-</script>
-</body>
+      }
+    </script>
+  </body>
 </html>

@@ -1,3 +1,5 @@
+import { assocPath } from "ramda";
+
 import { getUnixTime } from "storage/IndexDBStorage";
 
 import { HooksType, SWPipePluginInterface } from "../../SWProcessingPipe";
@@ -9,32 +11,32 @@ export class EarlyInvalidationPlugin implements SWPipePluginInterface {
     hooks.isNeedToInvalidateCached.tapPromise(
       "EarlyInvalidationPlugin",
       (args) => {
-        const { cacheInfo, resultWeight } = args;
-        if (!cacheInfo || !cacheInfo.invalidateTime) {
+        let { cacheInfo, resultWeight } = args;
+        if (!cacheInfo?.invalidateTime) {
           return Promise.resolve(args);
         }
 
         console.log(cacheInfo.invalidateTime - getUnixTime());
-        return Promise.resolve({
-          ...args,
-          resultWeight:
-            resultWeight +
-            (getUnixTime() > cacheInfo.invalidateTime
-              ? +this.invalidationWeight
-              : 0),
-        });
-      },
+
+        if (getUnixTime() > cacheInfo.invalidateTime) {
+          resultWeight += this.invalidationWeight;
+        }
+
+        const result = assocPath(["resultWeight"], resultWeight, args);
+        return Promise.resolve(result);
+      }
     );
 
     hooks.onInsertCacheParams.tapPromise("EarlyInvalidationPlugin", (args) => {
-      const { params, requestConfig } = args;
-      return Promise.resolve({
-        ...args,
-        params: {
-          ...params,
-          invalidateTime: getUnixTime() + requestConfig.invalidateTime,
-        },
-      });
+      const {
+        requestConfig: { invalidateTime },
+      } = args;
+      const result = assocPath(
+        ["params", "invalidateTime"],
+        getUnixTime() + invalidateTime,
+        args
+      );
+      return Promise.resolve(result) as any;
     });
   }
 }

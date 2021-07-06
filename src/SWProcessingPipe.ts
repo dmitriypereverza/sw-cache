@@ -61,6 +61,17 @@ export interface HooksType {
   }>;
 }
 
+interface InnerFetchInterface {
+  isExecute: (key: string) => boolean;
+  run: (
+    promiseHandler: (
+      resolve: (data: any) => void,
+      reject?: (data: any) => void
+    ) => void,
+    key: string
+  ) => Promise<any>;
+}
+
 export class SWProcessingPipe {
   private plugins: any[];
   private config: {
@@ -70,16 +81,7 @@ export class SWProcessingPipe {
   private readonly throttledFunc: any;
 
   private logClient: any;
-  private innerFetch: {
-    isExecute: (key: string) => boolean;
-    run: (
-      promiseHandler: (
-        resolve: (data: any) => void,
-        reject?: (data: any) => void
-      ) => void,
-      key: string
-    ) => Promise<any>;
-  };
+  private innerFetch: InnerFetchInterface;
 
   constructor(
     private cacheId: string,
@@ -116,9 +118,7 @@ export class SWProcessingPipe {
 
   public setPlugins(plugins: SWPipePluginInterface[] = []) {
     this.plugins = plugins;
-    this.plugins.forEach((plugin) => {
-      plugin.init(this.hooks);
-    });
+    this.plugins.forEach((plugin) => plugin.init(this.hooks));
   }
 
   public onInstall() {
@@ -275,8 +275,6 @@ export class SWProcessingPipe {
     if (this.hooks.onBackgroundTaskStart.isUsed()) {
       this.hooks.onBackgroundTaskStart.call({ fetchEventHash });
     }
-    const cache = await caches.open(this.cacheId);
-    const cacheList = await this.dataStorageService.getAllRequestCacheInfo();
 
     const isNeedToInvalidateRequest = async (
       requestConfig,
@@ -298,16 +296,11 @@ export class SWProcessingPipe {
       return resultWeight > 0;
     };
 
+    const cacheList = await this.dataStorageService.getAllRequestCacheInfo();
     for (let cacheInfo of cacheList) {
       if (currentUrl && currentUrl === cacheInfo.url) {
         continue;
       }
-
-      const executeRequest = () =>
-        this.executeRequest(
-          () => fetch(cacheInfo.url, JSON.parse(cacheInfo.options)),
-          cacheInfo.url
-        );
 
       const isRequestExecuting = pathEq(["status"], "pending", cacheInfo);
       if (isRequestExecuting) {
@@ -318,6 +311,8 @@ export class SWProcessingPipe {
         cacheInfo.url,
         assoc("status", "pending", cacheInfo)
       );
+
+      const cache = await caches.open(this.cacheId);
       const respCache = await cache.match(cacheInfo.url);
       const requestConfig = this.getRequestConfig(cacheInfo.url);
       const needInvalidate = await isNeedToInvalidateRequest(
@@ -339,7 +334,10 @@ export class SWProcessingPipe {
           type: "invalidate",
         });
 
-      executeRequest().then((response) => {
+      this.executeRequest(
+        () => fetch(cacheInfo.url, JSON.parse(cacheInfo.options)),
+        cacheInfo.url
+      ).then((response) => {
         this.updateRequestCache({
           fetchEventHash,
           url: cacheInfo.url,
@@ -395,7 +393,9 @@ export class SWProcessingPipe {
       params = extendedParam;
     }
 
+    // noinspection ES6MissingAwait
     this.dataStorageService.createOrUpdateRequestCache(url, params as any);
+    // noinspection ES6MissingAwait
     (await caches.open(this.cacheId)).put(url, response);
   }
 
